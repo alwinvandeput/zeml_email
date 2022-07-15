@@ -1,0 +1,28 @@
+<xsl:transform version="1.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns:sap="http://www.sap.com/sapxsl"
+  xmlns:eml="http://www.mycompany.com/abapxml"
+>
+
+<sap:external-function
+    name="eml:format_decimal"
+    kind="class"
+    class="ZEML_XSLT_VALUE_FORMATTER"
+    method="FORMAT_DECIMAL" >
+   <sap:argument  param="COUNTRY_CODE_NC"/>
+   <sap:argument  param="DECIMAL_VALUE_NC"/>
+   <sap:argument  param="DECIMAL_COUNT"/>
+   <sap:result    param="FORMATTED_VALUE" type="string"/>
+</sap:external-function>
+
+<sap:external-function
+    name="eml:format_date"
+    kind="class"
+    class="ZEML_XSLT_VALUE_FORMATTER"
+    method="FORMAT_DATE" >
+   <sap:argument  param="COUNTRY_CODE_NC"/>
+   <sap:argument  param="DATE_NC"/>
+   <sap:result    param="FORMATTED_VALUE" type="string"/>
+</sap:external-function>
+
+</xsl:transform>
