@@ -24,17 +24,18 @@ CLASS zeml_extended_email_bo DEFINITION
 
     TYPES:
       BEGIN OF t_attachment,
-        attachment_type     TYPE soodk-objtp,
-        attachment_subject  TYPE sood-objdes,
-        attachment_size     TYPE sood-objlen,
-        attachment_language TYPE sood-objla,
+        attachment_type        TYPE soodk-objtp,
+        attachment_subject     TYPE sood-objdes,
+        attachment_size        TYPE sood-objlen,
+        attachment_language    TYPE sood-objla,
 
-        att_content_text    TYPE soli_tab,
-        att_content_hex     TYPE solix_tab,
-        att_content_xstring TYPE xstring,
+        att_content_text       TYPE soli_tab,
+        att_content_hex        TYPE solix_tab,
+        att_content_hex_length TYPE i,
+        att_content_xstring    TYPE xstring,
 
-        attachment_header   TYPE soli_tab,
-        vsi_profile         TYPE vscan_profile,
+        attachment_header      TYPE soli_tab,
+        vsi_profile            TYPE vscan_profile,
       END OF t_attachment,
       t_attachments TYPE STANDARD TABLE OF t_attachment WITH DEFAULT KEY.
 
@@ -105,10 +106,8 @@ CLASS zeml_extended_email_bo DEFINITION
 
     METHODS send
       RAISING
-        cx_bcs
         cx_xslt_runtime_error
         zcx_return3 .
-
   PROTECTED SECTION.
 
     DATA m_email TYPE t_email .
@@ -138,14 +137,28 @@ CLASS zeml_extended_email_bo DEFINITION
         VALUE(rv_content_string) TYPE string
       RAISING
         zcx_return3 .
-  PRIVATE SECTION.
+private section.
+
+  methods GET_EMAIL_ATTACHMENT_TYPE
+    importing
+      !ATTACHMENT_TYPE type SOODK-OBJTP
+      !ATTACHMENT_SUBJECT type SOOD-OBJDES
+    returning
+      value(EMAIL_ATTACHMENT_TYPE) type SOODK-OBJTP .
 ENDCLASS.
 
 
 
-CLASS zeml_extended_email_bo IMPLEMENTATION.
+CLASS ZEML_EXTENDED_EMAIL_BO IMPLEMENTATION.
 
 
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Protected Method ZEML_EXTENDED_EMAIL_BO->CONVERT_INPUT_TO_OUTPUT
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IV_FIELD_NAME                  TYPE        STRING
+* | [--->] IO_TYPE_DESCR                  TYPE REF TO CL_ABAP_TYPEDESCR
+* | [<-->] CA_DATA                        TYPE        ANY
+* +--------------------------------------------------------------------------------------</SIGNATURE>
   METHOD convert_input_to_output.
 
     CASE io_type_descr->kind.
@@ -228,6 +241,11 @@ CLASS zeml_extended_email_bo IMPLEMENTATION.
   ENDMETHOD.
 
 
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Protected Method ZEML_EXTENDED_EMAIL_BO->EXECUTE_CONVERSION_ROUTINES
+* +-------------------------------------------------------------------------------------------------+
+* | [<-()] RO_COPY_CONTENT_DATA           TYPE REF TO DATA
+* +--------------------------------------------------------------------------------------</SIGNATURE>
   METHOD execute_conversion_routines.
 
     "Set language
@@ -262,6 +280,15 @@ CLASS zeml_extended_email_bo IMPLEMENTATION.
   ENDMETHOD.
 
 
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Protected Method ZEML_EXTENDED_EMAIL_BO->GET_CONTENT_BY_XSLT
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IA_CONTENT                     TYPE        ANY
+* | [--->] IS_LABELS                      TYPE        ANY
+* | [--->] IS_SETTINGS                    TYPE        T_SETTINGS
+* | [<-()] RV_CONTENT_STRING              TYPE        STRING
+* | [!CX!] ZCX_RETURN3
+* +--------------------------------------------------------------------------------------</SIGNATURE>
   METHOD get_content_by_xslt.
 
     TRY.
@@ -343,6 +370,15 @@ CLASS zeml_extended_email_bo IMPLEMENTATION.
 
   ENDMETHOD.
 
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Protected Method ZEML_EXTENDED_EMAIL_BO->GET_EMAIL_TEXT
+* +-------------------------------------------------------------------------------------------------+
+* | [<---] EV_SUBJECT                     TYPE        SO_OBJ_DES
+* | [<---] ET_BODY_SOLI_TAB               TYPE        SOLI_TAB
+* | [!CX!] CX_XSLT_RUNTIME_ERROR
+* | [!CX!] ZCX_RETURN3
+* +--------------------------------------------------------------------------------------</SIGNATURE>
   METHOD get_email_text.
 
     "------------------------------------------------------------
@@ -462,6 +498,13 @@ CLASS zeml_extended_email_bo IMPLEMENTATION.
 
   ENDMETHOD.
 
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZEML_EXTENDED_EMAIL_BO->GET_SETTINGS
+* +-------------------------------------------------------------------------------------------------+
+* | [<-()] RS_SETTINGS                    TYPE        T_SETTINGS
+* | [!CX!] ZCX_RETURN3
+* +--------------------------------------------------------------------------------------</SIGNATURE>
   METHOD get_settings.
 
     "------------------------------------------------------------
@@ -561,6 +604,13 @@ CLASS zeml_extended_email_bo IMPLEMENTATION.
 
   ENDMETHOD.
 
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZEML_EXTENDED_EMAIL_BO->SEND
+* +-------------------------------------------------------------------------------------------------+
+* | [!CX!] CX_XSLT_RUNTIME_ERROR
+* | [!CX!] ZCX_RETURN3
+* +--------------------------------------------------------------------------------------</SIGNATURE>
   METHOD send.
 
     TRY.
@@ -631,20 +681,26 @@ CLASS zeml_extended_email_bo IMPLEMENTATION.
           ASSIGNING FIELD-SYMBOL(<ls_attachment>).
 
           IF <ls_attachment>-att_content_xstring IS NOT INITIAL.
-            <ls_attachment>-att_content_hex =
-              cl_bcs_convert=>xstring_to_solix(
-                iv_xstring = <ls_attachment>-att_content_xstring ).
+            DATA(binary_data) = zdat_binary_data=>create_by_xstring( <ls_attachment>-att_content_xstring ).
+            DATA(solix) = binary_data->get_solix( ).
+            <ls_attachment>-att_content_hex = solix-solix_tab.
+            <ls_attachment>-attachment_size = binary_data->get_size_text( ).
+            CLEAR binary_data.
           ENDIF.
 
+          DATA(email_attachment_type) = get_email_attachment_type(
+            attachment_type     = <ls_attachment>-attachment_type
+            attachment_subject  = <ls_attachment>-attachment_subject ).
+
           bcs_document_obj->add_attachment(
-              i_attachment_type      = <ls_attachment>-attachment_type
-              i_attachment_subject   = <ls_attachment>-attachment_subject
-              i_attachment_size      = <ls_attachment>-attachment_size
-              i_attachment_language  = <ls_attachment>-attachment_language
-              i_att_content_text     = <ls_attachment>-att_content_text
-              i_att_content_hex      = <ls_attachment>-att_content_hex
-              i_attachment_header    = <ls_attachment>-attachment_header
-              iv_vsi_profile         = <ls_attachment>-vsi_profile ).
+            i_attachment_type      = email_attachment_type
+            i_attachment_subject   = <ls_attachment>-attachment_subject
+            i_attachment_size      = <ls_attachment>-attachment_size
+            i_attachment_language  = <ls_attachment>-attachment_language
+            i_att_content_text     = <ls_attachment>-att_content_text
+            i_att_content_hex      = <ls_attachment>-att_content_hex
+            i_attachment_header    = <ls_attachment>-attachment_header
+            iv_vsi_profile         = <ls_attachment>-vsi_profile ).
 
         ENDLOOP.
 
@@ -658,16 +714,60 @@ CLASS zeml_extended_email_bo IMPLEMENTATION.
 
       CATCH cx_bcs INTO DATA(lo_exception).
 
-        RAISE EXCEPTION lo_exception.
+        DATA(return3_exc) = NEW zcx_return3( ).
+
+        return3_exc->add_exception_object( lo_exception ).
 
     ENDTRY.
 
   ENDMETHOD.
 
 
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Public Method ZEML_EXTENDED_EMAIL_BO->SET_DATA
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IS_DATA                        TYPE        T_EMAIL
+* +--------------------------------------------------------------------------------------</SIGNATURE>
   METHOD set_data.
 
     m_email = is_data.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Instance Private Method ZEML_EXTENDED_EMAIL_BO->GET_EMAIL_ATTACHMENT_TYPE
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] ATTACHMENT_TYPE                TYPE        SOODK-OBJTP
+* | [--->] ATTACHMENT_SUBJECT             TYPE        SOOD-OBJDES
+* | [<-()] EMAIL_ATTACHMENT_TYPE          TYPE        SOODK-OBJTP
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD get_email_attachment_type.
+
+    "Transaction SOST does not handle long extension like .xlsx AND .docx in a good way.
+    "Therefor the attachment type is changed to EXTernal.
+
+    "Example.
+    "When a user clicks on an .xlsx file (with attachment type XLS) SOST downloads the file and it adds .xls to the file.
+    "Than it opens Excels and Excel interpretes the file as an .xls instead of an .xlsx file and raises and error.
+
+    email_attachment_type = attachment_type.
+
+    CASE attachment_type.
+
+      WHEN 'XLS'.
+        FIND '.xlsx' IN attachment_subject.
+        IF sy-subrc = 0.
+          email_attachment_type = 'EXT'.
+        ENDIF.
+
+      WHEN 'DOC'.
+        FIND '.docx' IN attachment_subject.
+        IF sy-subrc = 0.
+          email_attachment_type = 'EXT'.
+        ENDIF.
+
+    ENDCASE.
 
   ENDMETHOD.
 ENDCLASS.
